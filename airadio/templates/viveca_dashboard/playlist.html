@@ -1,0 +1,994 @@
+{% extends "base.html" %}
+
+{% load static radio_tags el_pagination_tags %}
+
+{% block title %}Playlist{% endblock %}
+{% block navbar_title %}PLAYLIST{% endblock %}
+
+{% block content %}
+
+<!-- Tailwind CSS forcefully called classes -->
+<div class="hidden text-red-500 text-green-500 text-sky-500"></div>
+
+<div class="grid grid-cols-1 max-w-full overflow-hidden rounded-2xl gap-1 mb-4">
+  <div class="bg-lighter-gray max-w-full p-4">
+    <h2 class="text-lg font-semibold leading-6 text-white mb-6">PLAYLIST</h2>
+
+    <div class="flex mb-6">
+      <div class="inline-block input-group">
+        <label for="id_location_input" class="input-label mb-1">SELECT LOCATION</label>
+        <select id="id_location_input" class="select-input">
+          <option value="all" {% if request.GET.location_ref == 'all' %}selected{% endif %}>ALL</option>
+          {% for location in locations %}
+          <option value="{{ location.id }}" {% if request.GET.location_ref == location.id|slugify %}selected{% endif %}>
+            {{ location.location_city }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="inline-block input-group ml-6">
+        <label for="station" class="input-label mb-1">SELECT STATION</label>
+        <select id="station" class="select-input">
+          {% for station in stations %}
+          <option value="{{ station.id }}" {% if request.GET.station_ref == station.id|slugify %}selected{% endif %}>
+            {{ station.station_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    {% comment %} <div class="btn-group open">
+      <button type="button" class="btn btn-primary"
+        onclick=window.location.href="{% url 'viveca_dashboard_reports_playlist_export' %}?station="
+        +$('#station').val()+"&location="+$('#id_location_input').val();><i class="fa fa-list"></i> <span>SHOW EXPORT</span>
+      </button>
+    </div> {% endcomment %}
+
+    <div class="flex justify-end relative inline-block text-left mb-6">
+      <div>
+        <button type="button" data-dropdown-toggle="playlist_tools_dropdown"
+          class="viveca-primary-button"
+          id="menu-button" aria-expanded="true" aria-haspopup="true">
+          <i class="fa-solid fa-gear fa-fw"></i>
+          TOOLS
+          <i class="fa-solid fa-angle-down"></i>
+        </button>
+      </div>
+      <div
+        class="viveca-dropdown-box"
+        id="playlist_tools_dropdown" role="menu" aria-orientation="vertical" aria-labelledby="menu-button" tabindex="-1">
+        <div class="py-1" role="none">
+          <a href="javascript:;" data-modal-target="add_playlist_modal" data-modal-toggle="add_playlist_modal" class="viveca-dropdown-item" role="menuitem" tabindex="-1">
+            <i class="fa-solid fa-plus fa-fw"></i> Add
+          </a>
+          <a href="javascript:;" data-modal-target="generate_playlist_modal" data-modal-toggle="generate_playlist_modal" onclick="exportPlaylist();" class="viveca-dropdown-item" role="menuitem" tabindex="-1">
+            <i class="fa-solid fa-inbox fa-fw"></i> Export
+          </a>
+          <a href="javascript:;" onclick="deleteItems();" class="viveca-dropdown-item" role="menuitem" tabindex="-1">
+            <i class="fa-solid fa-trash fa-fw"></i> Delete
+          </a>
+          <a href="javascript:;" onclick="saveItems();" class="viveca-dropdown-item" role="menuitem" tabindex="-1">
+            <i class="fa-solid fa-refresh fa-fw"></i> Save
+          </a>
+        </div>
+      </div>
+
+      <button id="reorder_button" disabled type="button" class="viveca-primary-button ml-4" onclick="reorderItems();">
+        <i class="fa-solid fa-up-down fa-fw"></i> SAVE ORDER
+      </button>
+    </div>
+
+    <form id="IDPlaylist" action="." method="post">
+      {% csrf_token %}
+      <input id="action" type="hidden" name="reorder">
+
+      {% paginate 25 playlist using 'list' %}
+
+      <div class="bg-main-gray pb-2 rounded-xl overflow-x-scroll">
+        <div class="inline-block min-w-full py-2 align-middle">
+          <table id="mytable" class="min-w-full divide-y divide-separator-gray">
+            <thead>
+              <th scope="col" class="relative input-group px-7 sm:w-12 sm:px-6">
+                <input type="checkbox" id="id_check_all_playlist" class="checkbox-input"/>
+              </th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-white">POSITION</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-white">ARTIST</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-white">TITLE</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-white">SKIP</th>
+{#              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-white">&nbsp;</th>#}
+            </thead>
+
+            <tbody class="divide-y divide-separator-gray" >
+              {% for item in playlist %}
+              {% get_playlist_item item as object %}
+              <tr class="border-t border-gray-200" data-song-id="{{item.content_object.id}}" data-type="{{ object|to_class_name|slugify }}">
+                <td class="relative input-group px-7 sm:w-12 sm:px-6">
+                  <input checked type="checkbox" name="reordered" value="{{ item.id }}" class="hidden"/>
+                  <input type="checkbox" name="id" value="{{ item.id }}" class="checkbox-input"/>
+                </td>
+                <td class="px-3 py-4 text-sm font-mono {{ object|text_color_class}}">
+                    <div class="flex w-full">
+                        <div class="flex mt-2.5" style="width: 25%">{{ item.position }}</div>
+                        <div class="ml-3">
+                            <button type="button" id="id_audio{{item.id}}" data-url="{{ object.media }}" onclick="playAudio({{ item.id }})"
+                  class="flex items-center bg-teal-600 rounded-full p-2.5 shrink-0">
+                  <img class="w-5 h-5" src="{% static "images/play_button_white.svg" %}" alt="">
+                </button>
+                        </div>
+                    </div>
+
+                </td>
+                <td class="px-3 py-4 text-sm font-mono {{ object|text_color_class}}">{% if object.artistname %}{{ object.artistname|default:'-' }}{% else %}{{ object|to_class_name}}{% endif %}</td>
+                <td class="px-3 py-4 text-sm font-mono {{ object|text_color_class}}">{{ object.title }}</td>
+                <td class="relative input-group px-3 py-4 text-sm text-white">
+                <div class="flex justify-between" style="width: 70%">
+                <div>
+                  <input {% if item.skipped %}checked{% endif %} type="checkbox" name="skipped" value="{{ item.id }}" class="checkbox-input"/>
+                </div>
+                    <button type="button" onClick="addNewRowForVoicetrack({{item.id}}, {{forloop.counter}});"
+                  class="flex items-center bg-gray-700 text-white rounded-full p-3 shrink-0">
+                  <svg class="w-4 h-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 16 20">
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"
+                      d="M15 7v3a5.006 5.006 0 0 1-5 5H6a5.006 5.006 0 0 1-5-5V7m7 9v3m-3 0h6M7 1h2a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V4a3 3 0 0 1 3-3Z" />
+                  </svg>
+                </button>
+                <div class="flex">
+                  <button type="button" class="viveca-secondary-button text-base" onclick="openMixer()" title="Mixer">
+                    <i class="fa-solid fa-headphones-simple"></i>
+                </div>
+                </div>
+                </td>
+                <td class="px-3 py-2 text-white">
+                </td>
+              </tr>
+              {% empty %}
+              <tr class="odd">
+                <td class="text-base text-center text-white font-semibold px-3 pt-6 lg:pt-8" valign="center" colspan="5" class="dataTables_empty">No records found
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% show_pages %}
+    </form>
+  </div>
+
+  <div class="bg-lighter-gray max-w-full p-4">
+    <h2 class="text-lg font-semibold leading-6 text-white mb-6">GLOBAL</h2>
+    <button type="button" id="social_code_modal_btn" data-modal-target="social_code_modal" data-modal-toggle="social_code_modal" class="hidden" role="menuitem" tabindex="-1"></button>
+
+    <form id="IDGlobalPlaylist" action="." method="post">
+      {% csrf_token %}
+      {% paginate 25 global_playlist using 'playlist' %}
+
+      <div class="bg-main-gray pb-4 rounded-xl overflow-x-scroll">
+        <div class="inline-block min-w-full py-2 align-middle">
+          <table class="min-w-full divide-y divide-separator-gray">
+            <thead>
+              <th scope="col" class="relative input-group px-7 sm:w-12 sm:px-6">
+                <input type="checkbox" id="id_check_all_social" class="checkbox-input"/>
+              </th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-white">TITLE</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-white">TYPE</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-white">UPDATED</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-white">&nbsp;</th>
+              <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-white">PREVIEW</th>
+            </thead>
+
+            <tbody class="divide-y divide-separator-gray">
+              {% for item in global_playlist %}
+              <tr>
+                <td class="relative input-group px-7 sm:w-12 sm:px-6">
+                  <input type="checkbox" name="id" value="{{ item.id }}" class="checkbox-input"/>
+                </td>
+                <td class="px-3 py-4 text-sm text-white">{{ item.title }}</td>
+                <td class="px-3 py-4 text-sm text-white">{{ item.get_type_display }}</td>
+                <td class="px-3 py-4 text-sm text-white">{{ item.updated }}</td>
+                <td class="whitespace-nowrap px-3 py-4 text-sm text-white">
+                  {% comment %} <a href="javascript:;" onclick=""
+                    class="viveca-secondary-button">Add to Playlist</a> {% endcomment %}
+                </td>
+                <td class="text-center px-3 py-4 text-sm text-white">
+                  <div id="{{ item.media }}" class="CrbUI_AudioButton"></div>
+                </td>
+              </tr>
+              {% empty %}
+              <tr class="odd">
+                <td class="text-base text-center text-white font-semibold px-3 pt-6 lg:pt-8" valign="center" colspan="6" class="dataTables_empty">No records found
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% show_pages %}
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block modal %}
+<div id="add_playlist_modal" tabindex="-1" aria-hidden="true"
+  class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-[51] justify-center items-center w-full md:inset-0 h-[calc(100%-2rem)] md:h-[calc(100%-4rem)] max-h-full pointer-events-none">
+  <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+
+  <div class="relative px-4 lg:pl-20 pt-16 w-full max-w-2xl max-h-full">
+    <!-- Modal content -->
+    <div class="relative bg-lighter-gray rounded-lg shadow pointer-events-auto">
+      <!-- Modal header -->
+      <div class="flex items-center justify-between p-4 md:p-5 border-b rounded-t">
+        <h3 class="text-xl font-semibold text-white">
+          ADD PLAYLIST
+        </h3>
+        <button type="button" data-modal-hide="add_playlist_modal"
+          class="text-gray-100 bg-transparent hover:bg-main-gray hover:text-white rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center">
+          <svg class="w-3 h-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 14">
+            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="m1 1 6 6m0 0 6 6M7 7l6-6M7 7l-6 6" />
+          </svg>
+          <span class="sr-only">Close modal</span>
+        </button>
+      </div>
+      <!-- Modal body -->
+      <div class="p-4 md:p-5 space-y-4">
+        <form id="searchForm" method="post" role="form" action="{% url 'viveca_dashboard_reports_playlist_insert' %}">
+          <input id="searchStation" type="hidden" name="station" value="">
+          <input id="searchLocation" type="hidden" name="location" value="">
+
+          <div class="horizontal-input-group">
+            <label for="IDtype" class="input-label">TYPE</label>
+            <div class="form-control-box">
+              <select id="IDtype" name="type" class="form-control">
+                <option value="music">Music</option>
+                <!--<option value="wall">Wall</option>-->
+                <option value="branding">Branding</option>
+                <option value="advert">Advert</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="horizontal-input-group">
+            <label for="IDsearch" class="input-label">SEARCH</label>
+            <div class="form-control-box">
+              <input id="IDsearch" type="text" class="form-control" />
+            </div>
+          </div>
+
+          <div id="searchResults">
+          </div>
+        </form>
+
+        <div class="flex justify-center py-6">
+          <button type="button" class="viveca-primary-button" onclick="insertToPlaylist();">
+            <i class="fa-solid fa-circle-check fa-fw"></i> <span>ADD PLAYLIST</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <div id="staticModal" class="fixed inset-0 flex items-center justify-center hidden p-4">
+     <div class="flex flex-col w-full lg:w-2/3 mb-4 p-4" style="background: #2e2d2d">
+    <!-- Top Menu -->
+    <div class="bg-lighter-gray rounded-lg py-3 px-2 mb-3">
+      <h2 class="text-lg font-semibold leading-6 text-white mb-6">ACTIONS</h2>
+
+      <div class="flex flex-wrap justify-end items-center gap-4 md:gap-5 mb-5">
+        <div class="inline-block">
+          <label for="id_ramp" class="input-label mb-1">&nbsp;</label>
+          <div class="input-group flex relative">
+            <input type="checkbox" id="id_ramp" name="ramp" />
+            <label for="id_ramp" class="input-label ml-5">RAMP</label>
+          </div>
+        </div>
+
+        <div class="inline-block input-group">
+          <label for="id_position" class="input-label mb-1">POSITION</label>
+          <select id="id_position" name="position">
+            {% for position in position_prompts %}
+            <option value="{{ position.pk }}">
+              {{ position.position }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="inline-block input-group">
+          <label for="id_location_input" class="input-label mb-1">SELECT LOCATION</label>
+          <select id="id_location_input" class="select-input">
+            <option value="all" {% if request.GET.location_ref == 'all' %}selected{% endif %}>ALL</option>
+            {% for location in locations %}
+            <option value="{{ location.id }}" {% if request.GET.location_ref == location.id|slugify %}selected{% endif %}>
+              {{ location.location_city }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="inline-block input-group">
+          <label for="id_station_input" class="input-label mb-1">SELECT STATION</label>
+          <select id="id_station_input" class="select-input">
+            <option value="">-----</option>
+            {% for station in stations %}
+            <option value="{{ station.id }}" {% if request.GET.station_ref == station.id|slugify %}selected{% endif %}>
+              {{ station.station_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap justify-end items-center gap-2 mb-2">
+        <button type="button" class="viveca-primary-button">
+          <i class="fa-solid fa-trash fa-fw"></i> DELETE
+        </button>
+
+        <button type="button" class="viveca-primary-button">
+          <i class="fa-solid fa-pencil fa-fw"></i> UPDATE
+        </button>
+
+        <button type="button" class="viveca-primary-button">
+          <i class="fa-solid fa-refresh fa-fw"></i> SAVE AS
+        </button>
+      </div>
+    </div>
+
+    <!-- SetupAIVoicetrack -->
+    <div class="bg-lighter-gray rounded-lg py-3 px-2 mb-3">
+      <h2 class="text-lg font-semibold leading-6 text-white mb-6">SETUP AI VOICETRACKS</h2>
+
+      <div class="flex flex-row justify-end flex-wrap items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="input-group relative">
+            <label for="id_voiceSelect" class="input-label">VOICE</label>
+          </div>
+          <div class="input-group input-group-fit-content larger-select">
+            <select id="id_voiceSelect" name="voiceSelect">
+              <option value="voice1">Ava Summers</option>
+              <option value="voice2">Nexus James</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="w-0.5 h-5 bg-gray-500 rounded-sm"></div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="input-group relative pr-1">
+            <label for="id_duration_words" class="input-label">DURATION</label>
+          </div>
+          <div class="input-group input-group-fit-content larger-select">
+            <select id="id_duration_words" name="duration_words">
+              {% comment %} seconds presened as number of words {% endcomment %}
+              <option value="20">5s</option>
+              <option value="40">10s</option>
+              <option value="60" selected>15s</option>
+              <option value="120">30s</option>
+              <option value="240">60s</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="w-0.5 h-5 bg-gray-500 rounded-sm"></div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button"
+            class="inline-flex justify-center items-center gap-x-2 px-3 py-2.5 text-sm text-white font-semibold bg-emerald-700 hover:bg-emerald-800 rounded-md shadow-sm shrink-0">
+            <i class="fa-solid fa-backward"></i> PREVIOUS HOUR
+          </button>
+
+          <button type="button"
+            class="inline-flex justify-center items-center gap-x-2 px-3 py-2.5 text-sm text-white font-semibold bg-emerald-700 hover:bg-emerald-800 rounded-md shadow-sm shrink-0">
+            <i class="fa-solid fa-forward"></i> NEXT HOUR
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Topics -->
+    <div class="flex flex-col md:flex-row gap-3 mb-3">
+      <div class="h-full bg-lighter-gray rounded-lg md:w-2/3 py-3 px-2">
+        <h2 class="text-lg font-semibold leading-6 text-white mb-6">TOPICS</h2>
+
+        {% regroup topic_prompts|dictsort:"color_group" by color_group as topics_list %}
+        {% for topic in topics_list %}
+        <div class="w-full flex flex-row flex-wrap justify-start bg-main-gray gap-2 p-2 rounded-md mb-2">
+          {% for item in topic.list %}
+            {% include "viveca_dashboard/partials/ai_voicetracks_topics_button.html" with topic=item.topic bg_color=item.get_color_group %}
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="h-full bg-lighter-gray rounded-lg md:w-1/3 py-3 px-2">
+        <h2 class="text-lg font-semibold leading-6 text-white mb-6">VT COMPOSITION</h2>
+
+        <table id="vt_composition_table" class="w-full">
+          <tbody></tbody>
+        </table>
+
+        <button type="button" id="id_generate_voicetrack" onclick="generateVoicetrack()"
+          class="inline-flex w-full justify-center items-center gap-x-2 xl:gap-x-3 px-3 py-2.5 text-sm text-white font-semibold bg-emerald-700 hover:bg-emerald-800 rounded-md shadow-sm shrink-0 mt-4{% if not request.GET.station_ref %} disabled{% endif %}">
+          <svg id="id_generate_voicetrack_spinner" role="status" class="inline w-4 h-4 text-white animate-spin hidden" viewBox="0 0 100 101"
+            fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
+              fill="#E5E7EB" />
+            <path
+              d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
+              fill="currentColor" />
+          </svg>
+          <i id="id_generate_voicetrack_icon" class="fa-solid fa-pencil fa-fw"></i>
+          GENERATE VOICETRACK
+        </button>
+      </div>
+    </div>
+
+    <!-- Text Editor -->
+    <div class="flex flex-col md:flex-row gap-3 mb-3">
+      <div class="bg-lighter-gray rounded-lg py-3 px-2 md:w-2/3">
+        <h2 class="text-lg font-semibold leading-6 text-white mb-6">EDIT SCRIPT</h2>
+        <textarea id="id_generated_voicetrack" rows="4"
+          class="p-2.5 w-full text-sm text-white rounded-lg border bg-main-gray border-separator-gray placeholder-gray-400 focus:ring-ring-gray focus:border-ring-gray"
+          placeholder="Radio One, it's Ava Summers with you and Someone who is full of public appearances right now with her boyfriend is this girl. I am totally shipping this relationship, just in case you didn't realize by the amount I bang on about it. Taylor Swift on Radio One"></textarea>
+      </div>
+
+     <div class="bg-lighter-gray rounded-lg flex flex-col gap-2 py-3 px-2 md:w-1/3">
+        <button id="id_generate_audio" onclick="generateAudio()"
+          class="w-min-content h-full text-white bg-sky-500 hover:bg-sky-600 text-md font-semibold rounded-md flex flex-row justify-center items-center gap-2 p-2">
+          <svg id="id_generate_audio_spinner" role="status" class="inline w-4 h-4 text-white animate-spin hidden" viewBox="0 0 100 101"
+            fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
+              fill="#E5E7EB" />
+            <path
+              d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
+              fill="currentColor" />
+          </svg>
+          <i id="id_generate_audio_icon" class="fa-solid fa-music fa-fw"></i>
+          GENERATE AUDIO
+        </button>
+
+        <button
+          class="w-min-content h-full text-white bg-sky-500 hover:bg-sky-600 text-md font-semibold rounded-md flex flex-row justify-center items-center gap-2 p-2">
+          <i class="fa-solid fa-download fa-fw"></i> EXPORT AUDIO
+        </button>
+      </div>
+      </div>
+
+
+    <!-- SoundWaves -->
+  <div class="w-full flex flex-row gap-2">
+      <div class="relative w-full bg-lighter-gray rounded-lg py-3 px-2">
+        <div id="waveform" class="text-black"
+          data-url="https://firebasestorage.googleapis.com/v0/b/podcastsite-1bedc.appspot.com/o/audio-files%2Frsdyncont-1.mp3?alt=media&token=4acc73f8-4cdd-432a-b3b5-6921cf802bd0">
+        </div>
+        <div id="wavesurfer_loading" style="display:none" role="status"
+          class="absolute top-0 left-0 w-full h-full flex justify-center items-center">
+          <svg aria-hidden="true" class="w-10 h-10 text-gray-200 animate-spin fill-blue-600" viewBox="0 0 100 101" fill="none"
+            xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
+              fill="currentColor" />
+            <path
+              d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z"
+              fill="currentFill" />
+          </svg>
+          <span class="sr-only">Loading...</span>
+        </div>
+      </div>
+
+      <div class="h-full bg-lighter-gray rounded-lg flex items-center py-3 px-2">
+        <button type="button" disabled id="waveform_toggle_button"
+          class="disabled_waveform_button w-full h-full flex justify-center items-center text-white">
+          <img class="w-12 h-12" src="{% static "images/play_button_white.svg" %}" alt="">
+        </button>
+      </div>
+    </div>
+    </div>
+
+     
+  </div>
+
+{#enf of Moda#}
+<div id="generate_playlist_modal" tabindex="-1" aria-hidden="true"
+  class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-[51] justify-center items-center w-full md:inset-0 h-[calc(100%-2rem)] md:h-[calc(100%-4rem)] max-h-full pointer-events-none">
+  <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+
+  <div class="relative px-4 lg:pl-20 pt-16 w-full max-w-2xl max-h-full">
+    <!-- Modal content -->
+    <div class="relative bg-lighter-gray rounded-lg shadow pointer-events-auto">
+      <!-- Modal header -->
+      <div class="flex items-center justify-between p-4 md:p-5 border-b rounded-t">
+        <h3 class="text-xl font-semibold text-white">
+          ADD PLAYLIST
+        </h3>
+        <button type="button" data-modal-hide="generate_playlist_modal"
+          class="text-gray-100 bg-transparent hover:bg-main-gray hover:text-white rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center">
+          <svg class="w-3 h-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 14">
+            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="m1 1 6 6m0 0 6 6M7 7l6-6M7 7l-6 6" />
+          </svg>
+          <span class="sr-only">Close modal</span>
+        </button>
+      </div>
+      <!-- Modal body -->
+      <div class="p-4 md:p-5 space-y-4">
+        <div id="process_playlist" class="modal-body portlet-body">
+          <div class="progress progress-striped progress-success active">
+            <div style="width: 100%;" class="bar"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="social_code_modal" tabindex="-1" aria-hidden="true"
+  class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-[51] justify-center items-center w-full md:inset-0 h-[calc(100%-2rem)] md:h-[calc(100%-4rem)] max-h-full pointer-events-none">
+  <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+
+  <div class="relative px-4 lg:pl-20 pt-16 w-full max-w-2xl max-h-full">
+    <!-- Modal content -->
+    <div class="relative bg-lighter-gray rounded-lg shadow pointer-events-auto">
+      <!-- Modal header -->
+      <div class="flex items-center justify-between p-4 md:p-5 border-b rounded-t">
+        <h3 class="text-xl font-semibold text-white">
+          ADD/EDIT SOCIALCODE
+        </h3>
+        <button type="button" data-modal-hide="social_code_modal"
+          class="text-gray-100 bg-transparent hover:bg-main-gray hover:text-white rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center">
+          <svg class="w-3 h-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 14">
+            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="m1 1 6 6m0 0 6 6M7 7l6-6M7 7l-6 6" />
+          </svg>
+          <span class="sr-only">Close modal</span>
+        </button>
+      </div>
+      <!-- Modal body -->
+      <div class="p-4 md:p-5 space-y-4">
+        <div id="social-code-form"></div>
+
+        <div class="flex justify-center py-6">
+          <button type="button" class="viveca-primary-button" onclick="if($('#txttitle').val() == ''){alert('Please add a title');}else{$('.next_path').val('{{ request.get_full_path }}');$('#id_socialcodeForm').submit();}">
+            <i class="fa-solid fa-circle-check fa-fw"></i> <span>ADD MUSICBED</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+<div id="myModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center">
+  <div class="bg-lighter-gray rounded-lg py-3 px-2 mb-3">
+      <h2 class="text-lg font-semibold leading-6 text-white mb-6">ACTIONS</h2>
+
+      <div class="flex flex-wrap justify-end items-center gap-4 md:gap-5 mb-5">
+        <div class="inline-block">
+          <label for="id_ramp" class="input-label mb-1">&nbsp;</label>
+          <div class="input-group flex relative">
+            <input type="checkbox" id="id_ramp" name="ramp" />
+            <label for="id_ramp" class="input-label ml-5">RAMP</label>
+          </div>
+        </div>
+
+        <div class="inline-block input-group">
+          <label for="id_position" class="input-label mb-1">POSITION</label>
+          <select id="id_position" name="position">
+            {% for position in position_prompts %}
+            <option value="{{ position.pk }}">
+              {{ position.position }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="inline-block input-group">
+          <label for="id_location_input" class="input-label mb-1">SELECT LOCATION</label>
+          <select id="id_location_input" class="select-input">
+            <option value="all" {% if request.GET.location_ref == 'all' %}selected{% endif %}>ALL</option>
+            {% for location in locations %}
+            <option value="{{ location.id }}" {% if request.GET.location_ref == location.id|slugify %}selected{% endif %}>
+              {{ location.location_city }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="inline-block input-group">
+          <label for="id_station_input" class="input-label mb-1">SELECT STATION</label>
+          <select id="id_station_input" class="select-input">
+            <option value="">-----</option>
+            {% for station in stations %}
+            <option value="{{ station.id }}" {% if request.GET.station_ref == station.id|slugify %}selected{% endif %}>
+              {{ station.station_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap justify-end items-center gap-2 mb-2">
+        <button type="button" class="viveca-primary-button">
+          <i class="fa-solid fa-trash fa-fw"></i> DELETE
+        </button>
+
+        <button type="button" class="viveca-primary-button">
+          <i class="fa-solid fa-pencil fa-fw"></i> UPDATE
+        </button>
+
+        <button type="button" class="viveca-primary-button">
+          <i class="fa-solid fa-refresh fa-fw"></i> SAVE AS
+        </button>
+      </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block extra-scripts %}
+<script src="{% static 'CrbUI/audio/button/js/modernizr.js' %}" type="text/javascript"></script>
+<script src="{% static 'CrbUI/audio/button/js/swfobject.js' %}" type="text/javascript"></script>
+    <script src="{% static 'js/table_audio_player.js' %}" type="text/javascript"></script>
+    <script src="{% static 'js/wavesurfer_methods.js' %}" type="text/javascript"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7"></script>
+<script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+
+<script src="{% static 'CrbUI/audio/button/js/CrbUI_AudioButton-0.74.js' %}" type="text/javascript"></script>
+<script type="text/javascript">
+
+  $(document).ready(function () {
+    createWaveform();
+
+    $('#id_location_input').on('change', function (e) {
+      let url = new URL(window.location.href);
+      url.searchParams.set('location_ref', $(this).val());
+      window.location.href = url;
+    });
+
+    $('#id_station_input').on('change', function (e) {
+      let url = new URL(window.location.href);
+      url.searchParams.set('station_ref', $(this).val());
+      window.location.href = url;
+    });
+  });
+
+  (function () {
+    var table = document.getElementById('mytable');
+    var rows = table.rows;
+    var dragSrcEl = null;
+
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      row.draggable = true;
+
+      row.addEventListener('dragstart', function (e) {
+        dragSrcEl = this;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/html', this.outerHTML);
+        this.classList.add('bg-gray-100');
+      });
+
+      row.addEventListener('dragend', function (e) {
+        this.classList.remove('bg-gray-100');
+        table.querySelectorAll('.border-t-2', '.border-blue-300').forEach(function (el) {
+          this.classList.add('border-t', 'border-gray-200');
+          el.classList.remove('border-t-2', 'border-blue-300');
+        });
+      });
+
+      row.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        this.classList.remove('border-t', 'border-gray-200');
+        this.classList.add('border-t-2', 'border-blue-300');
+      });
+
+      row.addEventListener('dragenter', function (e) {
+        e.preventDefault();
+        this.classList.remove('border-t', 'border-gray-200');
+        this.classList.add('border-t-2', 'border-blue-300');
+      });
+
+      row.addEventListener('dragleave', function (e) {
+        this.classList.remove('border-t-2', 'border-blue-300');
+        this.classList.add('border-t', 'border-gray-200');
+      });
+
+      row.addEventListener('drop', function (e) {
+        e.preventDefault();
+        if (dragSrcEl != this) {
+          var sourceIndex = dragSrcEl.rowIndex;
+          var targetIndex = this.rowIndex;
+          if (sourceIndex < targetIndex) {
+            table.tBodies[0].insertBefore(dragSrcEl, this.nextSibling);
+          } else {
+            table.tBodies[0].insertBefore(dragSrcEl, this);
+          }
+        }
+
+        table.querySelectorAll('.border-t-2', '.border-blue-300').forEach(function (el) {
+          el.classList.remove('border-t-2', 'border-blue-300');
+          el.classList.add('border-t', 'border-gray-200');
+        });
+
+        document.getElementById('reorder_button').disabled = false;
+      });
+    }
+  })();
+
+  $('#id_check_all_playlist').on('click', function () {
+    var $this = $(this);
+    if ($this.is(':checked')) {
+      $("#IDPlaylist input[name='id']").each(function () {
+        $(this).prop("checked", true);
+      });
+    } else {
+      $("#IDPlaylist input[name='id']").each(function () {
+        $(this).prop("checked", false);
+      });
+    }
+  });
+
+  $('#station').on('change', function (e) {
+    window.location.href = '{{ request.path }}' + '?station_ref=' + $(this).val() + '&location_ref=' + $('#id_location_input').val();
+  });
+
+  $('#id_location_input').on('change', function (e) {
+    if ($("#station").val() == null) {
+      alert('Please select a station.')
+    } else {
+      window.location.href = '{{ request.path }}' + '?station_ref=' + $('#station').val() + '&location_ref=' + $(this).val();
+    }
+  });
+
+  $("#IDsearch").on('keyup', function (e) {
+    var q = $(this).val();
+    var type = $('#IDtype').val();
+    if (type == '') {
+      alert('Please select a type.');
+    } else {
+      $.ajax({
+        data: {
+          'q': q,
+          'type': $('#IDtype').val()
+        },
+        type: 'post',
+        url: "{% url 'viveca_dashboard_reports_playlist_search' %}",
+        success: function (data) {
+          $('#searchResults').html(data.html);
+
+        },
+        error: function (e) {
+          alert('error');
+        }
+      });
+    }
+  });
+
+  function addNewRowForVoicetrack(nextSongId, rowIndex,event) {
+      if (event) {
+        event.preventDefault();
+    }
+      let table = document.getElementById("mytable");
+  let row = table.insertRow(rowIndex);
+  let cell1 = row.insertCell(0);
+  cell1.id = "id_voicetrack_row";
+  cell1.className = "py-2 px-3 font-mono text-sm text-center leading-6";
+  cell1.colSpan = 3;
+  cell1.innerHTML = "New AI Voicetrack";
+
+  // Find the previous and next songs in the playlist
+  for (let i = rowIndex - 1; i > 0; i--) {
+    if (table.rows[i].getAttribute("data-type") == "library") {
+      let prevRowSongId = table.rows[i].getAttribute("data-song-id");
+      cell1.setAttribute("data-prev-song", prevRowSongId);
+      break;
+    }
+  }
+
+  for (let i = rowIndex + 1; i < table.rows.length; i++) {
+    if (table.rows[i].getAttribute("data-type") == "library") {
+      let nextRowSongId = table.rows[i].getAttribute("data-song-id");
+      cell1.setAttribute("data-next-song", nextRowSongId);
+      break;
+    }
+  }
+  openModal(nextSongId, rowIndex);
+}
+
+   function openModal(songId, rowIndex) {
+      const modal = document.getElementById('staticModal');
+      const modalContent = document.getElementById('modalContent');
+      modal.classList.remove('hidden');
+      {#modalContent.textContent = `Modal opened for row ${rowIndex} with song ID ${songId}`;#}
+      {#console.log(`Modal opened for row ${rowIndex} with song ID ${songId}`);#}
+    }
+
+  function closeModal() {
+      const modal = document.getElementById('staticModal');
+      modal.classList.add('hidden');
+    }
+  function insertToPlaylist() {
+    $('#searchStation').val($('#station').val());
+    $('#searchLocation').val($('#id_location_input').val());
+    $('#searchForm').submit();
+  }
+  function enableGenerateVoicetrackButton() {
+    $('#id_generate_voicetrack').removeClass('disabled');
+    $('#id_generate_voicetrack_icon').removeClass('hidden');
+    $('#id_generate_voicetrack_spinner').addClass('hidden');
+  }
+
+  function generateVoicetrack() {
+    $('#id_generate_voicetrack').addClass('disabled');
+    $('#id_generate_voicetrack_icon').addClass('hidden');
+    $('#id_generate_voicetrack_spinner').removeClass('hidden');
+    let id_voicetrack_row = document.getElementById("id_voicetrack_row");
+    if (id_voicetrack_row == null) {
+      alert("Please add a voicetrack position on the playlist!");
+      enableGenerateVoicetrackButton();
+      return;
+    }
+    let prevSongId = id_voicetrack_row.getAttribute("data-prev-song", null);
+    let nextSongId = id_voicetrack_row.getAttribute("data-next-song", null);
+    let searchParams = new URLSearchParams(window.location.search);
+    let data = {
+      'prev_song_id': prevSongId,
+      'next_song_id': nextSongId,
+      'station_id': searchParams.get('station_ref'),
+      'words_limit': $('#id_duration_words').val(),
+      'position_prompt_id': $('#id_position').val(),
+    };
+    $.ajax({
+      data: data,
+      type: 'post',
+      url: "{% url 'viveca_dashboard_ai_voicetracks_generate_voicetrack' %}",
+      success: function (data) {
+        $('#id_generated_voicetrack').text(data);
+        enableGenerateVoicetrackButton();
+      },
+      error: function (e) {
+        enableGenerateVoicetrackButton();
+        if (["Failed to generate a voicetrack with missing prompts!", "Failed to generate a voicetrack without system prompt!",
+            "Failed to generate a voicetrack without user prompt!", "Error while getting prompts!"
+          ].includes(e.responseText)) {
+          alert(e.responseText);
+        } else {
+          alert('An error occurred while generating the voicetrack!');
+        }
+      }
+    });
+  }
+
+  function enableGenerateAudioButton() {
+    $('#id_generate_audio').removeClass('disabled');
+    $('#id_generate_audio_icon').removeClass('hidden');
+    $('#id_generate_audio_spinner').addClass('hidden');
+  }
+
+  function generateAudio() {
+    $('#id_generate_audio').addClass('disabled');
+    $('#id_generate_audio_icon').addClass('hidden');
+    $('#id_generate_audio_spinner').removeClass('hidden');
+    let id_voicetrack_text = document.getElementById("id_generated_voicetrack");
+    if (id_voicetrack_text.value == null) {
+      alert("Please generate a voicetrack script to generate audio!");
+      enableGenerateAudioButton();
+      return;
+    }
+    let data = {
+      'text': id_voicetrack_text.value,
+      'voice_code': "VqhODWFVNPDD7zn9N0p0",
+      // 'voice_code': $('#id_voiceSelect').val(),
+    };
+    $.ajax({
+      data: data,
+      type: 'post',
+      url: "{% url 'viveca_dashboard_ai_voicetracks_generate_audio' %}",
+      success: function (data) {
+        if (data.status == true) {
+          destroyOldWaveform();
+          $('#waveform').attr("data-url", data.audio_url);
+          createWaveform();
+        }
+        enableGenerateAudioButton();
+      },
+      error: function (e) {
+        enableGenerateAudioButton();
+        if (["Failed to generate a voicetrack with missing prompts!", "Failed to generate a voicetrack without system prompt!",
+            "Failed to generate a voicetrack without user prompt!", "Error while getting prompts!"
+          ].includes(e.responseText)) {
+          alert(e.responseText);
+        } else {
+          alert('An error occurred while generating the voicetrack!');
+        }
+      }
+    });
+  }
+
+  function reorderItems() {
+    $('#action').attr('name', 'reorder');
+    $('#IDPlaylist').submit();
+  }
+
+  function exportPlaylist() {
+    $.ajax({
+      data: {
+        'location': $('#id_location_input').val(),
+        'station': $('#station').val(),
+        'export': true
+      },
+      type: 'post',
+      url: "{% url 'viveca_dashboard_reports_playlist' %}",
+      success: function (data) {
+        window.location.href = data.redirect;
+      },
+      error: function (e) {
+        alert('error');
+      }
+    });
+  }
+
+  function deleteItems() {
+    $('#action').attr('name', 'delete');
+    $('#IDPlaylist').submit();
+  }
+
+  function saveItems() {
+    $('#action').attr('name', 'save');
+    $('#IDPlaylist').submit();
+  }
+
+  function processSocialCode(station, location, artist, twitter, instagram) {
+    $.ajax({
+      data: {
+        'station': station,
+        'location': String(location),
+        'artist': artist,
+        'twitter': twitter,
+        'instagram': instagram
+      },
+      type: 'post',
+      url: "{% url 'viveca_dashboard_reports_playlist_social_popup' %}",
+      success: function (data) {
+        $('#social-code-form').html(data.html);
+        $('#social_code_modal_btn').click();
+      },
+      error: function (e) {
+        alert('error');
+      }
+    });
+  }
+
+  function FetchPostData() {
+    var type = $('#id_type').val();
+    var link = $('#txtpost_link').val();
+    if (link == '') {
+      alert('Please enter a post link of the type selected');
+    } else {
+      $.ajax({
+        url: "{% url 'viveca_dashboard_reports_playlist_social_fetch_post_data' %}",
+        data: {
+          'post_type': type,
+          'post_url': link
+        },
+        method: 'POST',
+        success: function (data) {
+          if (data.status == true) {
+            $('#txtimg_link').val(data.media);
+            $('#txtpost_text').val(data.text);
+          } else {
+            alert('No data fetched.');
+          }
+        },
+        error: function (e) {
+          alert('No data fetched.');
+        }
+      });
+    }
+  }
+</script>
+{% endblock %}
